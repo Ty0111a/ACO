@@ -93,8 +93,8 @@ size_t random_choice(double* probabilities, size_t size) {
 
 
 size_t* step(double** closeness_matrix, double** pheromone_matrix, const size_t node_count, const size_t ant_count,
-    const double A, const double B, const double Q, const double evap, double* bpl) {
-
+    const double A, const double B, const double Q, const double E, double* bpl) {
+    perror("step");
     // simulate ant colony
     size_t** paths = (size_t**)malloc(ant_count * sizeof(size_t*));
     double* lens = malloc((double)(sizeof(double) * ant_count));
@@ -220,7 +220,7 @@ size_t* step(double** closeness_matrix, double** pheromone_matrix, const size_t 
 	return NULL;
     }   
     // evaporation
-    double e = 1 - evap;
+    double e = 1 - E;
     for (size_t i = 0; i < node_count; i++)
         for (size_t j = 0; j < node_count; j++)
             pheromone_matrix[i][j] *= e;
@@ -249,3 +249,32 @@ void free_better_path(size_t* ptr) {
     }
 }
 
+size_t* run(double** closeness_matrix, double** pheromone_matrix, size_t node_count, size_t ant_count, double A, double B, double Q, double E, double start_ph, size_t k, double* best_len) {
+    perror("run");
+    size_t* best_path = (size_t*)malloc(node_count * sizeof(size_t));
+    if (!best_path) {
+        perror("Failed to allocate memory for best_path");
+        return NULL;
+    }
+    *best_len = LONG_MAX;
+
+    for (size_t i = 0; i < k; i++) {
+        double current_len = LONG_MAX;
+        size_t* current_path = step(closeness_matrix, pheromone_matrix, node_count, ant_count, A, B, Q, E, &current_len);
+
+        if (!current_path) {
+            free(best_path);
+            return NULL;
+        }
+
+        if (current_len < *best_len) {
+            *best_len = current_len;
+            for (size_t j = 0; j < node_count; j++) {
+                best_path[j] = current_path[j];
+            }
+        }
+        free_better_path(current_path);
+    }
+
+    return best_path;
+}

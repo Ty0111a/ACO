@@ -13,9 +13,21 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 file_path = os.path.join(current_dir, f'c_aco', f'libaco.so')
 _external_ant_colony = ctypes.CDLL(file_path)
 
-_step = _external_ant_colony.step
-_step.argtypes = [_doublepp, _doublepp, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.POINTER(ctypes.c_double)]
-_step.restype = ctypes.POINTER(ctypes.c_size_t)
+_run = _external_ant_colony.run
+_run.argtypes = [
+    _doublepp,                       # closeness_matrix
+    _doublepp,                       # pheromone_matrix
+    ctypes.c_size_t,                 # node_count
+    ctypes.c_size_t,                 # ant_count
+    ctypes.c_double,                 # A
+    ctypes.c_double,                 # B
+    ctypes.c_double,                 # Q
+    ctypes.c_double,                 # evap
+    ctypes.c_double,                 # start_ph
+    ctypes.c_size_t,                 # k
+    ctypes.POINTER(ctypes.c_double)  # best_len
+]
+_run.restype = ctypes.POINTER(ctypes.c_size_t)
 
 _free_better_path = _external_ant_colony.free_better_path
 
@@ -23,7 +35,7 @@ class ACO:
     def __init__(self, graph):
         self.graph = graph
 
-    def step(self, ant_count, A, B, Q, E):
+    def run(self, ant_count, A, B, Q, E, start_ph, k):
         dmpp = (self.graph.closeness_matrix.__array_interface__['data'][0] + np.arange(
             self.graph.closeness_matrix.shape[0]) * self.graph.closeness_matrix.strides[0]).astype(np.uintp)
         pmpp = (self.graph.pheromone_matrix.__array_interface__['data'][0] + np.arange(
@@ -34,80 +46,18 @@ class ACO:
         B = ctypes.c_double(B)
         Q = ctypes.c_double(Q)
         E = ctypes.c_double(E)
-        bpl = ctypes.c_double()
-        try:
-            result_ptr = _step(dmpp, pmpp, node_count, ant_count, A, B, Q, E, ctypes.byref(bpl))
-            if result_ptr:
-                better_path = np.ctypeslib.as_array(result_ptr, shape=(1, node_count.value))[0]
-            else:
-                return float("inf"), []
-        except Exception as e:
-            print(f"{e}")
+        start_ph = ctypes.c_double(start_ph)
+        k = ctypes.c_size_t(k)
+        best_len = ctypes.c_double()
+
+        result_ptr = _run(dmpp, pmpp, node_count, ant_count, A, B, Q, E, start_ph, k, ctypes.byref(best_len))
+
+        if result_ptr:
+            best_path = np.ctypeslib.as_array(result_ptr, shape=(node_count.value,))
+            return best_len.value, best_path
+        else:
             return float("inf"), []
-        finally:
-            _external_ant_colony.free_better_path(result_ptr)
-    
-        return bpl.value, better_path
-
-    def run_performance(self, ant_count, A, B, Q, evap, start_ph, worktime, fine):
-        performances = []
-        self.graph.setPH(ph=start_ph)
-        # best_path_len = self.graph.lenRandomPath()
-        # best_path_len = float("inf")
-        best_path_len = fine
-        startTime = time.time()
-        while time.time() - startTime < worktime:
-            bpl, _ = self.step(ant_count=ant_count, A=A, B=B, Q=Q, E=evap)
-            if best_path_len > bpl:
-                performances.append((time.time() - startTime, bpl))
-                best_path_len = bpl
-
-        performance = 0
-        for i in range(1, len(performances)):
-            performance += (performances[i][0] - performances[i - 1][0]) * performances[i][1]
-
-        try:
-            if performances[-1][0] > worktime:
-                performance -= (performances[-1][0] - worktime) * performances[-1][1]
-            else:
-                performance += (worktime - performances[-1][0]) * performances[-1][1]
-        except IndexError:
-            pass
-
-        performance += best_path_len * 3 * worktime
-        return performance
-
-    def run_print(self, ant_count, A, B, Q, evap, start_ph, worktime):
-        print("let's go")
-        # TODO: написать отображение графика эффективности
-        self.graph.setPH(start_ph)
-        # best_path_len = self.graph.lenRandomPath()
-        best_path_len = float("inf")
-        startTime = time.time()
-        while time.time() - startTime < worktime:
-            bpl, _ = self.step(ant_count=ant_count, A=A, B=B, Q=Q, E=evap)
-            if best_path_len > bpl:
-                print(f"{time.time() - startTime} {bpl}")
-                best_path_len = bpl
-
-    def run(self, ant_count, A, B, Q, evap, start_ph, worktime):
-        self.graph.setPH(start_ph)
-        best_path = []
-        # best_path_len = self.graph.lenRandomPath()
-        best_path_len = float("inf")
-        startTime = time.time()
-        while time.time() - startTime < worktime:
-            bpl, bp = self.step(ant_count=ant_count, A=A, B=B, Q=Q, E=evap)
-            if best_path_len > bpl:
-                best_path_len = bpl
-                best_path = bp
-                print(f"{time.time() - startTime} {bpl}")
-
-        print(best_path_len)
-        return best_path
-
-
-
+       
 if __name__ == "__main__":
     """with open("logs.txt", "w") as file:
         graph = Graph()
@@ -150,4 +100,4 @@ if __name__ == "__main__":
 
     graph.add_k_nearest_edges(26)
     aco = ACO(graph)
-    print(aco.run(200, 3, 9, 1000, 0.3, 0.5, 2))
+    print(aco.run(200, 3, 9, 1000, 0.3, 0.5, 9))
