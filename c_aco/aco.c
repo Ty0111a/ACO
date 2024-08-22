@@ -92,9 +92,8 @@ size_t random_choice(double* probabilities, size_t size) {
 }
 
 
-size_t* step(double** closeness_matrix, double** pheromone_matrix, const size_t node_count, const size_t ant_count,
+size_t* ant_step(double** closeness_matrix, double** pheromone_matrix, const size_t node_count, const size_t ant_count,
     const double A, const double B, const double Q, const double E, double* bpl) {
-    perror("step");
     // simulate ant colony
     size_t** paths = (size_t**)malloc(ant_count * sizeof(size_t*));
     double* lens = malloc((double)(sizeof(double) * ant_count));
@@ -249,8 +248,7 @@ void free_better_path(size_t* ptr) {
     }
 }
 
-size_t* run(double** closeness_matrix, double** pheromone_matrix, size_t node_count, size_t ant_count, double A, double B, double Q, double E, double start_ph, size_t k, double* best_len) {
-    perror("run");
+size_t* run(double** closeness_matrix, double** pheromone_matrix, const size_t node_count, const size_t ant_count, const double A, const double B, const double Q, const double E, const size_t k, double* best_len) {
     size_t* best_path = (size_t*)malloc(node_count * sizeof(size_t));
     if (!best_path) {
         perror("Failed to allocate memory for best_path");
@@ -260,21 +258,18 @@ size_t* run(double** closeness_matrix, double** pheromone_matrix, size_t node_co
 
     for (size_t i = 0; i < k; i++) {
         double current_len = LONG_MAX;
-        size_t* current_path = step(closeness_matrix, pheromone_matrix, node_count, ant_count, A, B, Q, E, &current_len);
-
+        size_t* current_path = ant_step(closeness_matrix, pheromone_matrix, node_count, ant_count, A, B, Q, E, &current_len);
         if (!current_path) {
-            free(best_path);
-            return NULL;
-        }
-
-        if (current_len < *best_len) {
+            continue;
+        } else if (current_len < *best_len) {
             *best_len = current_len;
-            for (size_t j = 0; j < node_count; j++) {
-                best_path[j] = current_path[j];
+            for (size_t x = 0; x < node_count; x++) {
+                best_path[x] = current_path[x];
             }
         }
         free_better_path(current_path);
     }
-
+    /*for (size_t t = 0; t < node_count; t++)
+        printf("%ld\n", best_path[t]);*/
     return best_path;
 }

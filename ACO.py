@@ -23,7 +23,6 @@ _run.argtypes = [
     ctypes.c_double,                 # B
     ctypes.c_double,                 # Q
     ctypes.c_double,                 # evap
-    ctypes.c_double,                 # start_ph
     ctypes.c_size_t,                 # k
     ctypes.POINTER(ctypes.c_double)  # best_len
 ]
@@ -36,6 +35,7 @@ class ACO:
         self.graph = graph
 
     def run(self, ant_count, A, B, Q, E, start_ph, k):
+        self.graph.setPH(start_ph)
         dmpp = (self.graph.closeness_matrix.__array_interface__['data'][0] + np.arange(
             self.graph.closeness_matrix.shape[0]) * self.graph.closeness_matrix.strides[0]).astype(np.uintp)
         pmpp = (self.graph.pheromone_matrix.__array_interface__['data'][0] + np.arange(
@@ -46,17 +46,22 @@ class ACO:
         B = ctypes.c_double(B)
         Q = ctypes.c_double(Q)
         E = ctypes.c_double(E)
-        start_ph = ctypes.c_double(start_ph)
         k = ctypes.c_size_t(k)
         best_len = ctypes.c_double()
 
-        result_ptr = _run(dmpp, pmpp, node_count, ant_count, A, B, Q, E, start_ph, k, ctypes.byref(best_len))
-
-        if result_ptr:
-            best_path = np.ctypeslib.as_array(result_ptr, shape=(node_count.value,))
-            return best_len.value, best_path
-        else:
+        try:
+            result = _run(dmpp, pmpp, node_count, ant_count, A, B, Q, E, k, ctypes.byref(best_len))
+            if result:
+                result = result[:node_count.value]
+            else:
+                return float("inf"), []
+        except Exception as e:
+            print(f"{e}")
             return float("inf"), []
+        # finally:
+            # _external_ant_colony.free_better_path(result_ptr)
+
+        return best_len.value, result
        
 if __name__ == "__main__":
     """with open("logs.txt", "w") as file:
@@ -98,6 +103,6 @@ if __name__ == "__main__":
     file_path = os.path.join(current_dir, 'benchmarks', f'3d200.txt')
     graph.load(file_path, ph=0.5)
 
-    graph.add_k_nearest_edges(26)
+    graph.add_k_nearest_edges(77)
     aco = ACO(graph)
-    print(aco.run(200, 3, 9, 1000, 0.3, 0.5, 9))
+    print(aco.run(200, 3, 9, 1000, 0.3, 0.5, 100))
