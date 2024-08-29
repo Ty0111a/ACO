@@ -130,7 +130,7 @@ size_t* ant_step(double** closeness_matrix, double** pheromone_matrix, const siz
         size_t p = 0;
 
         for (size_t i = 1; i < node_count; i++) {
-            size_t size_enable;
+            size_t size_enable = 0;
             size_t* enable = nonzero_index(closeness_matrix[path[i - 1]], node_count, &size_enable);
 
             enable = setdiff1d(enable, path, size_enable, i, &size_enable);
@@ -248,7 +248,7 @@ void free_better_path(size_t* ptr) {
     }
 }
 
-size_t* run(double** closeness_matrix, double** pheromone_matrix, const size_t node_count, const size_t ant_count, const double A, const double B, const double Q, const double E, const size_t k, double* best_len) {
+size_t* run_fixed_generation(double** closeness_matrix, double** pheromone_matrix, const size_t node_count, const size_t ant_count, const double A, const double B, const double Q, const double E, const size_t k, double* best_len) {
     size_t* best_path = (size_t*)malloc(node_count * sizeof(size_t));
     if (!best_path) {
         perror("Failed to allocate memory for best_path");
@@ -273,3 +273,44 @@ size_t* run(double** closeness_matrix, double** pheromone_matrix, const size_t n
         printf("%ld\n", best_path[t]);*/
     return best_path;
 }
+
+size_t* run_until_repeated_solution(double** closeness_matrix, double** pheromone_matrix, const size_t node_count, const size_t ant_count, const double A, const double B, const double Q, const double E, const size_t k, double* best_len) {
+    size_t* best_path = (size_t*)malloc(node_count * sizeof(size_t));
+    if (!best_path) {
+        perror("Failed to allocate memory for best_path");
+        return NULL;
+    }
+    *best_len = LONG_MAX;
+
+    size_t repeat_count = 0;
+    double last_best_len = LONG_MAX;
+
+    while (repeat_count < k) {
+        double current_len = LONG_MAX;
+        size_t* current_path = ant_step(closeness_matrix, pheromone_matrix, node_count, ant_count, A, B, Q, E, &current_len);
+        if (!current_path) {
+            continue;
+        } else if (current_len < *best_len) {
+            *best_len = current_len;
+            for (size_t x = 0; x < node_count; x++) {
+                best_path[x] = current_path[x];
+            }
+            repeat_count = 0; 
+        } else if (current_len == last_best_len) {
+            repeat_count++;  
+        } else {
+            repeat_count = 0; 
+        }
+
+        last_best_len = current_len;
+        free_better_path(current_path);
+    }
+    
+    return best_path;
+}
+
+size_t* run_until_stable_solution(double** closeness_matrix, double** pheromone_matrix, const size_t node_count, const size_t ant_count, const double A, const double B, const double Q, const double E, const size_t k, const double delta, double* best_len) {
+    return NULL;
+}
+
+
