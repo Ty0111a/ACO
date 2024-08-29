@@ -137,6 +137,6 @@ if __name__ == "__main__":
     file_path = os.path.join(current_dir, 'benchmarks', f'3d200.txt')
     graph.load(file_path, ph=0.5)
 
-    graph.add_k_nearest_edges(77)
+    graph.add_k_nearest_edges(199)
     aco = ACO(graph)
     print(aco.run_fixed_generation(200, 3, 9, 1000, 0.3, 0.5, 100))
