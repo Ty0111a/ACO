@@ -6,7 +6,10 @@ import numpy as np
 from numpy.ctypeslib import ndpointer
 import ctypes
 from Graph import Graph
+
 from timeit import timeit
+import line_profiler
+from logger import logging
 
 _doublepp = ndpointer(dtype=np.uintp, ndim=1, flags='C')
 
@@ -28,21 +31,6 @@ _run_fixed_generation.argtypes = [
     ctypes.POINTER(ctypes.c_double)  # best_len
 ]
 _run_fixed_generation.restype = ctypes.POINTER(ctypes.c_size_t)
-
-_run_until_repeated_solution = _external_ant_colony.run_until_repeated_solution 
-_run_until_repeated_solution.argtypes = [
-    _doublepp,                       # closeness_matrix
-    _doublepp,                       # pheromone_matrix
-    ctypes.c_size_t,                 # node_count
-    ctypes.c_size_t,                 # ant_count
-    ctypes.c_double,                 # A
-    ctypes.c_double,                 # B
-    ctypes.c_double,                 # Q
-    ctypes.c_double,                 # evap
-    ctypes.c_size_t,                 # k (repeated solution count)
-    ctypes.POINTER(ctypes.c_double)  # best_len
-]
-_run_until_repeated_solution.restype = ctypes.POINTER(ctypes.c_size_t)
 
 _run_until_stable_solution = _external_ant_colony.run_until_stable_solution 
 _run_until_stable_solution.argtypes = [
@@ -67,8 +55,9 @@ class ACO:
     def __init__(self, graph):
         self.graph = graph
 
-    @timeit
-    def run_fixed_generation(self, ant_count, A, B, Q, E, start_ph, k):
+    @logging
+    @line_profiler.profile
+    def run(self, ant_count, A, B, Q, E, start_ph, k, delta=None, **info):
         self.graph.setPH(start_ph)
         dmpp = (self.graph.closeness_matrix.__array_interface__['data'][0] + np.arange(
             self.graph.closeness_matrix.shape[0]) * self.graph.closeness_matrix.strides[0]).astype(np.uintp)
@@ -81,10 +70,14 @@ class ACO:
         Q = ctypes.c_double(Q)
         E = ctypes.c_double(E)
         k = ctypes.c_size_t(k)
+        delta = ctypes.c_double(delta) if delta != None else None
         best_len = ctypes.c_double()
 
         try:
-            result = _run_fixed_generation(dmpp, pmpp, node_count, ant_count, A, B, Q, E, k, ctypes.byref(best_len))
+            if delta == None:
+                result = _run_fixed_generation(dmpp, pmpp, node_count, ant_count, A, B, Q, E, k, ctypes.byref(best_len))
+            else:
+                result = _run_until_stable_solution(dmpp, pmpp, node_count, ant_count, A, B, Q, E, k, delta, ctypes.byref(best_len))
             if result:
                 result = result[:node_count.value]
             else:
@@ -92,8 +85,6 @@ class ACO:
         except Exception as e:
             print(f"{e}")
             return float("inf"), []
-        # finally:
-            # _external_ant_colony.free_better_path(result_ptr)
 
         return best_len.value, result
        
@@ -139,4 +130,12 @@ if __name__ == "__main__":
 
     graph.add_k_nearest_edges(199)
     aco = ACO(graph)
-    print(aco.run_fixed_generation(200, 3, 9, 1000, 0.3, 0.5, 100))
+    print(aco.run(ant_count=100, 
+                  A=3, 
+                  B=9,
+                  Q=1000, 
+                  E=0.3, 
+                  start_ph=0.5, 
+                  k=20,
+                  delta=0,
+                  graph="3d200", nearest=199))
