@@ -274,7 +274,7 @@ size_t* run_fixed_generation(double** closeness_matrix, double** pheromone_matri
     return best_path;
 }
 
-size_t* run_until_repeated_solution(double** closeness_matrix, double** pheromone_matrix, const size_t node_count, const size_t ant_count, const double A, const double B, const double Q, const double E, const size_t k, double* best_len) {
+size_t* run_until_stable_solution(double** closeness_matrix, double** pheromone_matrix, const size_t node_count, const size_t ant_count, const double A, const double B, const double Q, const double E, const size_t k, const double delta, double* best_len) {
     size_t* best_path = (size_t*)malloc(node_count * sizeof(size_t));
     if (!best_path) {
         perror("Failed to allocate memory for best_path");
@@ -296,7 +296,7 @@ size_t* run_until_repeated_solution(double** closeness_matrix, double** pheromon
                 best_path[x] = current_path[x];
             }
             repeat_count = 0; 
-        } else if (current_len == last_best_len) {
+        } else if (fabs(current_len - last_best_len) <= delta) {
             repeat_count++;  
         } else {
             repeat_count = 0; 
@@ -305,12 +305,8 @@ size_t* run_until_repeated_solution(double** closeness_matrix, double** pheromon
         last_best_len = current_len;
         free_better_path(current_path);
     }
-    
+    /*for (size_t t = 0; t < node_count; t++)
+        printf("%ld\n", best_path[t]);*/
     return best_path;
 }
-
-size_t* run_until_stable_solution(double** closeness_matrix, double** pheromone_matrix, const size_t node_count, const size_t ant_count, const double A, const double B, const double Q, const double E, const size_t k, const double delta, double* best_len) {
-    return NULL;
-}
-
 
