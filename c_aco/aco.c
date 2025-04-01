@@ -266,6 +266,7 @@ size_t* run_fixed_generation(double** closeness_matrix, double** pheromone_matri
             for (size_t x = 0; x < node_count; x++) {
                 best_path[x] = current_path[x];
             }
+            printf("%ld %f\n", i, *best_len);
         }
         free_better_path(current_path);
     }
@@ -274,7 +275,7 @@ size_t* run_fixed_generation(double** closeness_matrix, double** pheromone_matri
     return best_path;
 }
 
-size_t* run_until_stable_solution(double** closeness_matrix, double** pheromone_matrix, const size_t node_count, const size_t ant_count, const double A, const double B, const double Q, const double E, const size_t k, const double delta, double* best_len) {
+size_t* run_until_stable_solution(double** closeness_matrix, double** pheromone_matrix, const size_t node_count, const size_t ant_count, const double A, const double B, const double Q, const double E, const size_t k, const double delta, const size_t max_generations, double* best_len) {
     size_t* best_path = (size_t*)malloc(node_count * sizeof(size_t));
     if (!best_path) {
         perror("Failed to allocate memory for best_path");
@@ -282,10 +283,14 @@ size_t* run_until_stable_solution(double** closeness_matrix, double** pheromone_
     }
     *best_len = LONG_MAX;
 
+    size_t current_generation = 0;
     size_t repeat_count = 0;
     double last_best_len = LONG_MAX;
 
     while (repeat_count < k) {
+        if ((current_generation++ > max_generations) && (max_generations != 0)) 
+            break;
+
         double current_len = LONG_MAX;
         size_t* current_path = ant_step(closeness_matrix, pheromone_matrix, node_count, ant_count, A, B, Q, E, &current_len);
         if (!current_path) {
@@ -295,6 +300,7 @@ size_t* run_until_stable_solution(double** closeness_matrix, double** pheromone_
             for (size_t x = 0; x < node_count; x++) {
                 best_path[x] = current_path[x];
             }
+            // printf("%f", *best_len);
             repeat_count = 0; 
         } else if (fabs(current_len - last_best_len) <= delta) {
             repeat_count++;  

@@ -27,7 +27,7 @@ _run_fixed_generation.argtypes = [
     ctypes.c_double,                 # B
     ctypes.c_double,                 # Q
     ctypes.c_double,                 # evap
-    ctypes.c_size_t,                 # k
+    ctypes.c_size_t,                 # k (count of generations)
     ctypes.POINTER(ctypes.c_double)  # best_len
 ]
 _run_fixed_generation.restype = ctypes.POINTER(ctypes.c_size_t)
@@ -44,6 +44,7 @@ _run_until_stable_solution.argtypes = [
     ctypes.c_double,                 # evap
     ctypes.c_size_t,                 # k (repeated solution count)
     ctypes.c_double,                 # delta
+    ctypes.c_size_t,                 # max_generations (break if arrive this)
     ctypes.POINTER(ctypes.c_double)  # best_len
 ]
 _run_until_stable_solution.restype = ctypes.POINTER(ctypes.c_size_t)
@@ -56,8 +57,10 @@ class ACO:
         self.graph = graph
 
     @logging
-    @line_profiler.profile
-    def run(self, ant_count, A, B, Q, E, start_ph, k, delta=None, **info):
+    @timeit
+    def run(self, ant_count, A, B, Q, E, start_ph, k, delta=None, max_generations=0, **info):
+        if ant_count <= 0:
+            return float("inf"), []
         self.graph.setPH(start_ph)
         dmpp = (self.graph.closeness_matrix.__array_interface__['data'][0] + np.arange(
             self.graph.closeness_matrix.shape[0]) * self.graph.closeness_matrix.strides[0]).astype(np.uintp)
@@ -70,72 +73,64 @@ class ACO:
         Q = ctypes.c_double(Q)
         E = ctypes.c_double(E)
         k = ctypes.c_size_t(k)
-        delta = ctypes.c_double(delta) if delta != None else None
+        delta = ctypes.c_double(delta) if delta is not None else None
+        max_generations = ctypes.c_size_t(max_generations)
         best_len = ctypes.c_double()
 
         try:
             if delta == None:
                 result = _run_fixed_generation(dmpp, pmpp, node_count, ant_count, A, B, Q, E, k, ctypes.byref(best_len))
             else:
-                result = _run_until_stable_solution(dmpp, pmpp, node_count, ant_count, A, B, Q, E, k, delta, ctypes.byref(best_len))
+                result = _run_until_stable_solution(dmpp, pmpp, node_count, ant_count, A, B, Q, E, k, delta, 
+                                                    max_generations, ctypes.byref(best_len))
             if result:
                 result = result[:node_count.value]
             else:
                 return float("inf"), []
+
         except Exception as e:
             print(f"{e}")
             return float("inf"), []
 
         return best_len.value, result
        
-if __name__ == "__main__":
-    """with open("logs.txt", "w") as file:
-        graph = Graph()
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        file_path = os.path.join(current_dir, 'benchmarks', f'4d1000.txt')
-        graph.load(file_path, ph=0.5)
-        graph.add_k_nearest_edges(999)
-
-        aco = ACO(graph)
-        aco.run_fixed_generation(1000, 3, 9, 10_000, 0.3, 0.5, 2_000)"""
-
-    '''current_dir = os.path.dirname(os.path.abspath(__file__))
-    logsfile = os.path.join(current_dir, f"log.txt")
-    with open(logsfile, "w") as file:
-        graph = Graph()
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        file_path = os.path.join(current_dir, 'benchmarks', f'4d1000.txt')
-        graph.load(file_path, ph=0.5)
-
-        for k in range(1000, 100, -50):
-            graph.add_k_nearest_edges(k)
-
-            aco = ACO(graph)
-            res = [aco.run_performance(ant_count=1000,
-                                       A=3,
-                                       B=9,
-                                       Q=10_000,
-                                       evap=0.30,
-                                       start_ph=0.50,
-                                       worktime=600,
-                                       fine=70_000) for _ in range(1)]
-
-            print(f"{k} {res}")
-            print(f"{k} {res}", file=file)'''
-
+def main(n, q):
     graph = Graph()
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(current_dir, 'benchmarks', f'3d200.txt')
+
+    graph_name = f"2d{n}"
+
+    file_path = os.path.join(current_dir, 'benchmarks', f'{graph_name}.txt')
     graph.load(file_path, ph=0.5)
 
-    graph.add_k_nearest_edges(199)
+    graph.load(file_path)
+    graph.add_k_nearest_edges(999)
     aco = ACO(graph)
-    print(aco.run(ant_count=100, 
-                  A=3, 
-                  B=9,
-                  Q=1000, 
-                  E=0.3, 
-                  start_ph=0.5, 
-                  k=20,
-                  delta=0,
-                  graph="3d200", nearest=199))
+    for _ in range(1):
+        result = aco.run(ant_count=n, 
+                  A=0.6, 
+                  B=4.5,
+                  Q=q, 
+                  E=0.2, 
+                  start_ph=0.4, 
+                  k=int(1.3 * n + 200),
+                  delta=None,
+                  max_generations=500,
+                  graph=graph_name, nearest=60)
+        try:
+            print(f"{result[0][0]} {result[1]}")
+        except _:
+            print(result)
+
+if __name__ == "__main__":
+    main(100, 120)
+    main(200, 190)
+    main(300, 220)
+    main(400, 220)
+    main(500, 320)
+    main(500, 320)
+    main(600, 420)
+    main(700, 420)
+    main(800, 520)
+    main(900, 520)
+    main(1000, 620)

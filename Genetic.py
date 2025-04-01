@@ -1,60 +1,118 @@
 import os
 import random
 import statistics
+import time
 
-from ACO import ACO, Graph, _init_rand
+from ACO import ACO, Graph
 
-if __name__ == "__main__":
-    _init_rand(random.randint(0, 4294967295))
-    aco_worktime = 2
+
+def main():
+    dimensity = 2
+    node_count = 100
+    graph_number = ""
+
     graph = Graph()
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(current_dir, 'benchmarks', '2d100.txt')
-    graph.load(file_path)
-    graph.add_k_nearest_edges(99)
-    aco = ACO(graph)
+    file_path = os.path.join(current_dir, 'benchmarks', f'{dimensity}d{node_count}{graph_number}.txt')
+
     parameters = {
-        "ant_count": [100],
-        "A": [0.25, 0.5, 1, 1.5, 2, 3, 4, 5],
-        "B": [3, 4, 5, 6, 7, 8, 9, 10, 11],
-        "Q": range(500, 10000, 500),
-        "evap": [0.2],
-        "start_ph": [0.5],
+        #"k_nearest": [36],
+        "k_nearest": range(10, node_count+1, 10),
+        #"ant_count": [43],
+        "ant_count": range(10, node_count*3, 10),
+        #"A": [0.41],
+        "A": [i / 100 for i in range(1, 200, 10)],
+        "B": range(3, 14),
+        "Q": range(20, node_count*4, 25),
+        "evap": [i / 10 for i in range(1, 10)],
+        #"evap": [0.2], 
+        "start_ph": [i / 10 for i in range(1, 10)],
+        #"start_ph": [0.2],
     }
 
-    population_size = 128
+    k = int(0.25 * node_count + 5)
+    delta = 0 
+
+    aco_launchs = 1 
+    lenth_weight = 0.6
+    time_weight = 1 - lenth_weight
+
+    genetic_generations = 10
+    population_size = 30 
+    elite_part = 0.5
     population = []
 
+    best_run_performance = float('inf')
+    best_run_info = ''
+
+    ''' first genetic generation '''
+    find_solution_in_generation = 0
+    l = 0
+    # set random params
     for i in range(population_size):
         individual = {}
         for key in parameters:
             individual[key] = random.choice(parameters[key])
         population.append(individual)
 
-    for l in range(20):
-        print(f"let's go {l}")
-        s = 0
-        for individual in population:
-            all_perfomance = [
-                aco.run_performance(ant_count=int(individual["ant_count"]), A=individual["A"], B=individual["B"],
-                                    Q=individual["Q"], evap=individual["evap"], start_ph=individual["start_ph"],
-                                    worktime=aco_worktime) for _ in range(50)]
-            individual["performance"] = statistics.mean(all_perfomance)
-            s += individual["performance"]
-            print(individual)
+    
+    start_time = time.time()
+    # run first gen
+    first_runs = []
+    for individual in population:
+        graph.load(file_path)
+        graph.add_k_nearest_edges(int(individual['k_nearest']))
+        aco = ACO(graph)
+        individual_runs = [aco.run(ant_count=int(individual["ant_count"]), A=individual["A"], B=individual["B"], Q=individual["Q"], 
+                                   E=individual["evap"], start_ph=individual["start_ph"], k=k, delta=delta, 
+                                   max_generations=int(1.18 * node_count + 120)) for _ in range(aco_launchs)]  
+        first_runs.append(min(individual_runs, key=lambda x: x[0][0]))
+        individual['run_info'] = individual_runs
+        individual['best_len'] = individual_runs[0][0][0]
+        if individual['best_len'] < best_run_performance:
+            best_run_performance = individual['best_len']
+            find_soluton_in_generation = l
+            best_run_info = individual_runs[0]
+            
+        
+    # find uniform params
+    first_runs.sort(key=lambda x: x[0][0])
+    best_first_runs = first_runs[:int(len(first_runs) * 0.5)] # TODO по другому отсекать невалидные решения
+    best_first_lenths = sorted([i[0][0] for i in best_first_runs])
+    best_first_times = sorted([i[1] for i in best_first_runs])
+    lenth_offset = min(best_first_lenths) 
+    lenth_factor = (statistics.median(best_first_lenths) - lenth_offset) * 2
+    time_offset = min(best_first_times) 
+    time_factor = (statistics.median(best_first_times) - time_offset) * 2 
 
-        print(f"avg {s // population_size}")
-
-        print(min(population, key=lambda x: x["performance"]))
-
+    # set rate for first generaion 
+    for individual in population:
+        all_performance = [lenth_weight * ((i[0][0] - lenth_offset) / lenth_factor) + 
+                           time_weight * ((i[1] - time_offset) / time_factor) for i in individual["run_info"]]
+        all_performance.sort()
+        individual["performance"] = statistics.median(all_performance)
+    population.sort(key=lambda x: x["performance"])
+    
+    ''' rum other genetic generarions '''
+    while True:
+        #print(f"gen {l} in {time.time() - start_time:.0f} sec")
+        #print(best_run_info)
+        start_time = time.time() 
         # elitism
-        elite_size = int(population_size * 0.3)
+        elite_size = int(population_size * elite_part)
         elite = sorted(population, key=lambda x: x["performance"])[:elite_size]
+        for individual in elite:
+            # print(f"{l} {individual['k_nearest']} {individual['ant_count']} {individual['A']} {individual['B']} {individual['Q']} {individual['evap']} {individual['start_ph']} {individual['performance']}")
+            pass
 
+        l += 1
+        if l > genetic_generations - 1: 
+            #print(f"{individual['k_nearest']} {individual['ant_count']} {individual['A']} {individual['B']} {individual['Q']} {individual['evap']} {individual['start_ph']} {individual['performance']}")
+            break # stop genetic
 
         def crossover(mommy, daddy):
             child = {}
-            for j in ["ant_count", "A", "B", "Q", "evap", "start_ph"]:
+            for j in ["k_nearest", "ant_count", "A", "B", "Q", "evap", "start_ph"]:
                 minj = min(mommy[j], daddy[j])
                 maxj = max(mommy[j], daddy[j])
                 dmin = minj - 0.25 * (maxj - minj)
@@ -70,13 +128,20 @@ if __name__ == "__main__":
 
 
         def mutate(child):
-            for i in ["ant_count", "A", "B", "Q", "evap", "start_ph"]:
-                if random.random() < 0.5:
-                    child[i] = random.triangular(min(parameters[i]), max(parameters[i]),
-                                                 random.gauss(child[i], child[i] * 0.2))
+            for i in ["k_nearest", "ant_count", "A", "B", "Q", "evap", "start_ph"]:
+                if random.random() < 0.1:
+                    low = min(parameters[i])
+                    high = max(parameters[i])
+                    if low == high:
+                        continue
+                    mode = child[i] 
+                    lambd = 60
+                    alpha = max(0.00001, abs(1 + lambd * (mode - low) / (high - low)))
+                    beta = max(0.00001 , abs(1 + lambd * (high - mode) / (high - low)))
+                    child[i] = low + (high - low) * random.betavariate(alpha, beta)
 
             for key in child:
-                child[key] = abs(child[key])
+                child[key] = round(abs(child[key]), 2) 
             if child["evap"] > 0.99: child["evap"] = 0.99
             return child
 
@@ -91,4 +156,33 @@ if __name__ == "__main__":
             child = mutate(child)
             offspring.append(child)
 
+        # find performance of aco
+        for individual in offspring:
+            graph.load(file_path)
+            graph.add_k_nearest_edges(int(individual['k_nearest']))
+            aco = ACO(graph)
+            all_runs = [
+                aco.run(ant_count=int(individual["ant_count"]), A=individual["A"], B=individual["B"], Q=individual["Q"],
+                                      E=individual["evap"], start_ph=individual["start_ph"], k=k, delta=delta,
+                                      max_generations=int(1.18 * node_count + 120)) for _ in range(aco_launchs)
+                       ]
+            all_performance = [lenth_weight*((i[0][0]-lenth_offset)/lenth_factor)+time_weight*((i[1]-time_offset)/time_factor) for i in all_runs]
+            all_performance.sort()
+            individual["performance"] = statistics.median(all_performance)
+            individual["best_len"] = all_runs[0][0][0]
+            if individual['best_len'] < best_run_performance:
+                best_run_performance = individual['best_len']
+                best_run_info = all_runs[0]
+                find_solution_in_generation = l
+
         population = elite + offspring
+        population.sort(key=lambda x: x["performance"])  
+        # print(min(population, key=lambda x: x["performance"]))
+
+    #print(best_run_info) 
+    print(f"{find_solution_in_generation} {best_run_performance}")
+
+
+if __name__ == "__main__":
+    for _ in range(500):
+        main()

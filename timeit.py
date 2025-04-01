@@ -6,6 +6,5 @@ def timeit(func):
         result = func(*args, **kwargs)
         end_time = time.time()
         elapsed_time = end_time - start_time
-        print(f"Function '{func.__name__}' executed in {elapsed_time:.6f} seconds")
-        return result
+        return result, elapsed_time
     return wrapper
