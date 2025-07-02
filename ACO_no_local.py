@@ -11,12 +11,10 @@ from timeit import timeit
 import line_profiler
 from logger import logging
 
-np.set_printoptions(threshold=np.inf, linewidth=np.inf)
-
 _doublepp = ndpointer(dtype=np.uintp, ndim=1, flags='C')
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
-file_path = os.path.join(current_dir, f'c_aco', f'libacoEA.so')
+file_path = os.path.join(current_dir, f'c_aco', f'libaco_standard.so')
 _external_ant_colony = ctypes.CDLL(file_path)
 
 _run_fixed_generation = _external_ant_colony.run_fixed_generation
@@ -25,7 +23,7 @@ _run_fixed_generation.argtypes = [
     _doublepp,                       # pheromone_matrix
     ctypes.c_size_t,                 # node_count
     ctypes.c_size_t,                 # ant_count
-    ctypes.POINTER(ctypes.c_double), # A
+    ctypes.c_double,                 # A
     ctypes.c_double,                 # B
     ctypes.c_double,                 # Q
     ctypes.c_double,                 # evap
@@ -40,7 +38,7 @@ _run_until_stable_solution.argtypes = [
     _doublepp,                       # pheromone_matrix
     ctypes.c_size_t,                 # node_count
     ctypes.c_size_t,                 # ant_count
-    ctypes.POINTER(ctypes.c_double), # A
+    ctypes.c_double,                 # A
     ctypes.c_double,                 # B
     ctypes.c_double,                 # Q
     ctypes.c_double,                 # evap
@@ -58,6 +56,7 @@ class ACO:
     def __init__(self, graph):
         self.graph = graph
 
+    @logging
     @timeit
     def run(self, ant_count, A, B, Q, E, start_ph, k, delta=None, max_generations=0, **info):
         if ant_count <= 0:
@@ -69,7 +68,7 @@ class ACO:
             self.graph.pheromone_matrix.shape[0]) * self.graph.pheromone_matrix.strides[0]).astype(np.uintp)
         node_count = ctypes.c_size_t(self.graph.pheromone_matrix.shape[0])
         ant_count = ctypes.c_size_t(ant_count)
-        A = (ctypes.c_double * self.graph.closeness_matrix.shape[0])(*A)
+        A = ctypes.c_double(A)
         B = ctypes.c_double(B)
         Q = ctypes.c_double(Q)
         E = ctypes.c_double(E)
@@ -95,7 +94,7 @@ class ACO:
 
         return best_len.value, result
        
-def main(n, q):
+def main(n):
     graph = Graph()
     current_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -105,23 +104,23 @@ def main(n, q):
     graph.load(file_path, ph=0.5)
 
     graph.load(file_path)
-    graph.add_k_nearest_edges(999)
+    graph.add_k_nearest_edges(n)
     aco = ACO(graph)
     for _ in range(1):
         result = aco.run(ant_count=n, 
-                  A=0.6, 
-                  B=4.5,
-                  Q=q, 
+                  A=0.5, 
+                  B=5.5,
+                  Q=120, 
                   E=0.2, 
                   start_ph=0.4, 
                   k=int(1.3 * n + 200),
                   delta=None,
-                  max_generations=500,
-                  graph=graph_name, nearest=60)
+                  max_generations=500
+                  )
         try:
             print(f"{result[0][0]} {result[1]}")
         except _:
             print(result)
 
 if __name__ == "__main__":
-    main(30, 120)
+    main(500)

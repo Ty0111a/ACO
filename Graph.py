@@ -24,6 +24,27 @@ class Graph:
         self.distance_matrix = cdist(self.cords, self.cords, 'euclidean')
         self.pheromone_matrix = np.full((len(self.cords), len(self.cords)), ph, dtype="double")
 
+    def get_mask_by_nearest_edges(self, k):
+        if k >= len(self.cords) - 1:
+            k = len(self.cords) - 2
+    
+        mask = np.zeros_like(self.distance_matrix)
+    
+        for i, row in enumerate(self.distance_matrix):
+            nearest_indices = np.argpartition(row, k+1)[:k+1]
+            nearest_indices = nearest_indices[nearest_indices != i]
+            if len(nearest_indices) < k:
+                next_nearest = np.argpartition(row, k+1)[k+1]
+                nearest_indices = np.append(nearest_indices, next_nearest)
+            mask[i, nearest_indices] = 1
+    
+        n = len(mask)
+        for i in range(n):
+            for j in range(i+1, n):
+                mask[i][j] = mask[j][i] = max(mask[i][j], mask[j][i])
+    
+        return mask
+
     def add_k_nearest_edges(self, k):
         if k >= len(self.cords) - 1:
             k = len(self.cords) - 2
@@ -45,6 +66,17 @@ class Graph:
                     self.closeness_matrix[i][j] = 0
                     continue
                 self.closeness_matrix[i][j] = 200 / self.closeness_matrix[i][j]
+    
+    def add_edges_by_mask(self, mask):
+        temp_distance_matrix = self.distance_matrix * mask
+        
+        n = len(temp_distance_matrix)
+        for i in range(n):
+            for j in range(i + 1, n):
+                temp_distance_matrix[j][i] = max(temp_distance_matrix[i][j], temp_distance_matrix[j][i])
+                temp_distance_matrix[i][j] = temp_distance_matrix[j][i]
+
+        self.closeness_matrix = np.divide(200, temp_distance_matrix, where=temp_distance_matrix > 0, out=np.zeros_like(temp_distance_matrix))        
 
     def __len__(self):
         return len(self.cords)

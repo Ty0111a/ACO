@@ -1,6 +1,6 @@
 CC = gcc-13
 CFLAGS = -fopenmp -O3 -Wall
-TARGET = libaco.so
+TARGET = libaco_standard.so
 SRC = aco.c
 
 all: $(TARGET)
