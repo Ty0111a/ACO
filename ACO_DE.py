@@ -41,7 +41,7 @@ class ACO:
     def __init__(self, graph):
         self.graph = graph
 
-    def run(self,v, ant_count, Q, E, start_ph, **info):
+    def run(self, f, cr, ant_count, Q, E, start_ph, **info):
         if ant_count <= 0:
             return float("inf"), []
         self.graph.setPH(start_ph)
@@ -54,7 +54,7 @@ class ACO:
 
         A_min, A_max = 0.01, 10.0
         B_min, B_max = 0.01, 10.0
-        N = v 
+        N = 10 
         unique_ant_count = ant_count.value // N
         A_vals = np.random.uniform(A_min, A_max, size=ant_count.value // N)
         B_vals = np.random.uniform(A_min, A_max, size=ant_count.value // N)
@@ -78,11 +78,13 @@ class ACO:
         #print(f"avg len {prev_avg_lengths}")
 
         #print(" ")
-        F = 0.8 
-        CR = 0.0
+        F = f 
+        CR = cr
+        DE_gens = 100 
         prev_A = A_vals.copy()
         prev_B = B_vals.copy()
-        for i in range(100):
+        best_A, best_B, global_best_len = None, None, float("inf")
+        for i in range(DE_gens):
             # мутация
             mutant_A = [prev_A[x]+F*(prev_A[y]-prev_A[z]) for x, y, z in (random.sample(range(len(prev_A)), 3) for _ in range(unique_ant_count))]
             mutant_B = [prev_B[x]+F*(prev_B[y]-prev_B[z]) for x, y, z in (random.sample(range(len(prev_B)), 3) for _ in range(unique_ant_count))]
@@ -93,8 +95,8 @@ class ACO:
             trial_A = [(a if A_min <= a <= A_max else (prev_A[i] + (A_min if a < A_min else A_max)) / 2) for i, a in enumerate(trial_A)]
             trial_B = [(b if B_min <= b <= B_max else (prev_B[i] + (B_min if b < B_min else B_max)) / 2) for i, b in enumerate(trial_B)]
             #print(f"Generation {i}:")
-            #print("A values:", [round(a, 2) for a in trial_A])
-            #print("B values:", [round(b, 2) for b in trial_B])
+            #print("A values:", *[float(round(a, 2)) for a in trial_A])
+            #print("B values:", *[float(round(b, 2)) for b in trial_B])
             # оценка приспособленности
             A = np.repeat(trial_A, N)
             B = np.repeat(trial_B, N)
@@ -104,6 +106,13 @@ class ACO:
             lengths_array = [all_lens[i] for i in range(ant_count.value)]
             current_lengths = np.array([all_lens[i] for i in range(ant_count.value)])
             current_avg_lengths = np.mean(current_lengths.reshape(-1, N), axis=1)
+            # Поиск параметров с минимальным маршрутом 
+            lens_array = [all_lens[i] for i in range(ant_count.value)]
+            min_index = int(np.argmin(lens_array))
+            ant_group_index = min_index // N 
+            best_A = trial_A[ant_group_index]
+            best_B = trial_B[ant_group_index]
+            global_best_len = lens_array[min_index]
             #print(best_len.value)
             # селекция (замещение) 
             for ant in range(unique_ant_count):
@@ -113,6 +122,20 @@ class ACO:
                     prev_avg_lengths[ant] = current_avg_lengths[ant]
             #print(f"All path lengths: {lengths_array}")
             #print(" ")
+        for i in range(100 - DE_gens):
+            #A = (ctypes.c_double * len(A))(*([0.6]*100))
+            A = (ctypes.c_double * len(A))(*([best_A]*100))
+            #B = (ctypes.c_double * len(B))(*([7.5]*100))
+            B = (ctypes.c_double * len(B))(*([best_B]*100))
+            result = _ant_step(dmpp, pmpp, node_count, ant_count, A, B, Q, E, ctypes.byref(best_len), all_lens)
+            lengths_array = [all_lens[i] for i in range(ant_count.value)]
+            current_lengths = np.array([all_lens[i] for i in range(ant_count.value)])
+            current_avg_lengths = np.mean(current_lengths.reshape(-1, N), axis=1)
+            #print(best_len.value)
+        #print(best_A)
+        #print(best_B)
+        #print(global_best_len)
+
 
         return best_len.value, result
        
@@ -128,10 +151,13 @@ if __name__ == "__main__":
     graph.load(file_path)
     graph.add_k_nearest_edges(99)
     aco = ACO(graph)
-    for v in [1, 2, 4, 5, 6, 8, 10, 12, 15, 20, 30, 40]:
-        result = [aco.run(v=v, ant_count=120, 
-                  Q=300, 
+    for f in [0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+        for cr in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+            result = [aco.run(ant_count=100, 
+                  f=f,
+                  cr=cr,
+                  Q=120, 
                   E=0.2, 
-                  start_ph=0.4)[0] for _ in range(100)]
-        print(f"{v} {np.mean(result)}")
+                  start_ph=0.4)[0] for _ in range(10)]
+            print(f"{cr} {f} {np.mean(result)}")
 
